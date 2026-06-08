@@ -6,7 +6,7 @@ import {
   DollarSign
 } from "lucide-react";
 import PaystackSim from "./PaystackSim";
-import { generateReportPDF } from "../utils/pdfGenerator";
+import { generateReportPDF, getReportId } from "../utils/pdfGenerator";
 
 interface ResultsDashboardProps {
   report: JapaReport;
@@ -17,6 +17,52 @@ export default function ResultsDashboard({ report, email }: ResultsDashboardProp
   const [isPaid, setIsPaid] = useState(false);
   const [showPaystack, setShowPaystack] = useState(false);
   const [activeCountryTab, setActiveCountryTab] = useState<number>(0);
+
+  const getCountryFlagImg = (country: string, fallbackEmoji: string, sizeClass = "w-[1.5em] h-[1.125em]") => {
+    const norm = country.trim().toLowerCase();
+    let code = "";
+    if (norm.includes("germany")) code = "de";
+    else if (norm.includes("united kingdom") || norm.includes("uk") || norm.includes("gbr")) code = "gb";
+    else if (norm.includes("canada")) code = "ca";
+    else if (norm.includes("united states") || norm.includes("usa") || norm.includes("america")) code = "us";
+    else if (norm.includes("ireland")) code = "ie";
+    else if (norm.includes("netherlands") || norm.includes("holland")) code = "nl";
+    else if (norm.includes("france")) code = "fr";
+    else if (norm.includes("italy")) code = "it";
+    else if (norm.includes("australia")) code = "au";
+    else if (norm.includes("new zealand")) code = "nz";
+    else if (norm.includes("finland")) code = "fi";
+    else if (norm.includes("sweden")) code = "se";
+    else if (norm.includes("spain")) code = "es";
+    else if (norm.includes("portugal")) code = "pt";
+    else if (norm.includes("uae") || norm.includes("emirates")) code = "ae";
+    else if (norm.includes("malaysia")) code = "my";
+    else if (norm.includes("korea")) code = "kr";
+    else if (norm.includes("china")) code = "cn";
+    else if (norm.includes("poland")) code = "pl";
+    else if (norm.includes("hungary")) code = "hu";
+
+    if (code) {
+      return (
+        <span className="inline-flex items-center justify-center">
+          <img
+            src={`https://flagcdn.com/w80/${code}.png`}
+            srcSet={`https://flagcdn.com/w160/${code}.png 2x`}
+            alt={country}
+            className={`inline-block ${sizeClass} object-cover rounded-xs align-middle shadow-xs`}
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              (e.target as HTMLElement).style.display = 'none';
+              const sib = e.currentTarget.parentElement?.querySelector('.fallback-emoji');
+              if (sib) (sib as HTMLElement).style.display = 'inline-block';
+            }}
+          />
+          <span className="fallback-emoji hidden">{fallbackEmoji}</span>
+        </span>
+      );
+    }
+    return <span className="fallback-emoji">{fallbackEmoji}</span>;
+  };
 
   const handlePaymentSuccess = (reference: string) => {
     setIsPaid(true);
@@ -90,7 +136,7 @@ export default function ResultsDashboard({ report, email }: ResultsDashboardProp
             <span className={`px-3 py-1 text-xs font-semibold rounded-full border ${getScoreColor(report.score)}`}>
               {report.score >= 70 ? "Strong Japa Passport Match" : report.score >= 40 ? "Moderate Chance Profile" : "Difficult Relocation Matrix"}
             </span>
-            <span className="text-[11px] font-mono text-light-text">{new Date().toLocaleDateString("en-NG", { year: "numeric", month: "long" })} REPORT ID</span>
+            <span className="text-[11px] font-mono text-light-text">{new Date().toLocaleDateString("en-NG", { year: "numeric", month: "long" })}  |  REPORT ID: {getReportId(email)}</span>
           </div>
           <p className="text-xs font-semibold text-light-text uppercase tracking-wider block font-mono">PROFILE SUMMARY MATRIX</p>
           <p className="text-body-text text-sm md:text-base leading-relaxed">
@@ -155,7 +201,9 @@ export default function ResultsDashboard({ report, email }: ResultsDashboardProp
               }`}
               id={`tab-country-${idx}`}
             >
-              <span className="text-xl md:text-2xl leading-none">{c.flag}</span>
+              <span className="text-xl md:text-2xl leading-none flex items-center justify-center">
+                {getCountryFlagImg(c.country, c.flag)}
+              </span>
               <span>{c.country}</span>
               <span className={`text-[10px] px-2 py-0.5 rounded-full ${idx === activeCountryTab ? "bg-white/20 text-white" : "bg-cream-bg text-primary-green border border-light-gold/10"}`}>
                 {c.matchPercentage}% Fit
@@ -187,7 +235,9 @@ export default function ResultsDashboard({ report, email }: ResultsDashboardProp
             <div className="bg-white rounded-3xl border border-light-gold/30 p-6 shadow-sm flex flex-col justify-between" style={{ minHeight: "260px" }}>
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-6xl font-serif">{currentCountry.flag}</span>
+                  <span className="text-6xl font-serif flex items-center justify-center">
+                    {getCountryFlagImg(currentCountry.country, currentCountry.flag)}
+                  </span>
                   <span className="text-3xl font-serif font-bold text-primary-green">{currentCountry.matchPercentage}% <span className="text-xs text-light-text font-sans block text-right uppercase tracking-[0.2em] font-mono">MATCH RATE</span></span>
                 </div>
                 <div>

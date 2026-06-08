@@ -1,7 +1,42 @@
 import { jsPDF } from "jspdf";
 import { JapaReport, CountryResult } from "../types";
 
+// Helper to sanitize and process string inputs to be completely safe for standard PDF Helvetica font.
+// Replaces currency symbols, unsupported ticks, cross marks, star ratings, and flight flags to avoid font metrics corruption.
+function cleanText(text: string): string {
+  if (!text) return "";
+  return text
+    // Replace Naira symbol with NGN
+    .replace(/₦/g, "NGN ")
+    // Replace Euro sign with EUR
+    .replace(/€/g, "EUR ")
+    // Remove other problematic emojis/ticks/arrows to avoid breaking core character widths
+    .replace(/✔/g, "")
+    .replace(/✘/g, "")
+    .replace(/✈/g, "")
+    .replace(/★/g, "")
+    .replace(/☆/g, "")
+    .replace(/✅/g, "")
+    .replace(/❌/g, "")
+    // Keep clean standard printable ASCII characters and standard bullet point
+    .replace(/[^\x0A\x0D\x20-\x7E\u2022]/g, "")
+    .trim();
+}
+
+// Generate fully deterministic 6 digit report ID from email
+export function getReportId(email: string): string {
+  let hash = 0;
+  const cleanEmail = (email || "").trim().toLowerCase();
+  for (let i = 0; i < cleanEmail.length; i++) {
+    hash = (hash << 5) - hash + cleanEmail.charCodeAt(i);
+    hash |= 0; // Convert to 32bit integer
+  }
+  const idNum = Math.abs(hash) % 900000 + 100000;
+  return `JR-2026-${idNum}`;
+}
+
 export function generateReportPDF(report: JapaReport, email: string) {
+  const reportId = getReportId(email);
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
@@ -49,7 +84,7 @@ export function generateReportPDF(report: JapaReport, email: string) {
 
     doc.setFont("Helvetica", "normal");
     doc.setTextColor(100, 116, 139);
-    doc.text("•  OFFICIAL IMMIGRATION SUITABILITY METRIC REPORT", leftMargin + 24, 10.5);
+    doc.text(`•  OFFICIAL IMMIGRATION SUITABILITY METRIC REPORT  |  ID: ${reportId}`, leftMargin + 24, 10.5);
 
     // 3. Running Footer Border Line, Date, and Counter
     doc.setDrawColor(226, 232, 240);
@@ -59,7 +94,7 @@ export function generateReportPDF(report: JapaReport, email: string) {
     doc.setFont("Helvetica", "normal");
     doc.setFontSize(7.5);
     doc.setTextColor(100, 116, 139);
-    doc.text(`DELIVERED TO: ${email.toLowerCase()}  |  DATE: ${new Date().toLocaleDateString("en-NG", { year: "numeric", month: "long" })}`, leftMargin, 287);
+    doc.text(`DELIVERED TO: ${email.toLowerCase()}  |  ID: ${reportId}  |  DATE: ${new Date().toLocaleDateString("en-NG", { year: "numeric", month: "long" })}`, leftMargin, 287);
     
     doc.setFont("Helvetica", "bold");
     doc.text(`CONFIDENTIAL PRO REPORT  |  Page ${pNum}`, rightMargin, 287, { align: "right" });
@@ -93,7 +128,7 @@ export function generateReportPDF(report: JapaReport, email: string) {
   doc.setFont("Helvetica", "bold");
   doc.setFontSize(18);
   doc.setTextColor(255, 255, 255);
-  doc.text("JAPAREADY PREMIUM DOSIER", leftMargin + 6, 31);
+  doc.text("JAPAREADY PREMIUM DOSSIER", leftMargin + 6, 31);
 
   doc.setFont("Helvetica", "normal");
   doc.setFontSize(9);
@@ -108,12 +143,15 @@ export function generateReportPDF(report: JapaReport, email: string) {
   doc.setFont("Helvetica", "normal");
   doc.setTextColor(240, 240, 240);
   doc.setFontSize(8);
-  doc.text(`VALIDATED SECURE INTEGRATION`, rightMargin - 6, 38, { align: "right" });
+  doc.text(`REPORT ID: ${reportId}  |  VALIDATED SECURE INTEGRATION`, rightMargin - 6, 38, { align: "right" });
 
   y = 58;
 
   // executive summary score container card
-  const scoreTextLines = doc.splitTextToSize(report.scoreText, printableWidth - 46);
+  // ALWAYS set active fonts and sizes immediately before running splitTextToSize to guarantee spacing calculation integrity
+  doc.setFont("Helvetica", "normal");
+  doc.setFontSize(9);
+  const scoreTextLines = doc.splitTextToSize(cleanText(report.scoreText), printableWidth - 48); // 48 is safe limit to afford elegant gold border space
   const scoreBoxHeight = Math.max(scoreTextLines.length * 4.5 + 14, 34);
 
   checkPageBreak(scoreBoxHeight + 4);
@@ -159,9 +197,9 @@ export function generateReportPDF(report: JapaReport, email: string) {
   doc.line(leftMargin, y + 2, rightMargin, y + 2);
   y += 7;
 
-  const summaryParagraphLines = doc.splitTextToSize(report.profileSummaryText, printableWidth);
   doc.setFont("Helvetica", "normal");
   doc.setFontSize(9.5);
+  const summaryParagraphLines = doc.splitTextToSize(cleanText(report.profileSummaryText), printableWidth);
   doc.setTextColor(51, 65, 85);
   // Give proper spacing and paragraph structure
   doc.text(summaryParagraphLines, leftMargin, y);
@@ -183,13 +221,13 @@ export function generateReportPDF(report: JapaReport, email: string) {
   doc.setFont("Helvetica", "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(100, 116, 139);
-  doc.text("✔ Authenticated with central student registration registries across OECD countries.", leftMargin + 6, y + 15);
-  doc.text("✔ Financial calculations updated in real-time corresponding to CBN parallel bank currency indexes.", leftMargin + 6, y + 21);
-  doc.text("✔ Direct integration checks run on academic degree recognition indexes for Nigerian universities.", leftMargin + 6, y + 27);
-  doc.text("✔ Post-study job opportunity quotients mapped to current 2026/2027 worker shortages.", leftMargin + 6, y + 33);
+  // Clean ASCII-supported bullet points instead of tick icons
+  doc.text("•  Authenticated with central student registration registries across OECD countries.", leftMargin + 6, y + 15);
+  doc.text("•  Financial calculations updated in real-time corresponding to CBN parallel bank currency indexes.", leftMargin + 6, y + 21);
+  doc.text("•  Direct integration checks run on academic degree recognition indexes for Nigerian universities.", leftMargin + 6, y + 27);
+  doc.text("•  Post-study job opportunity quotients mapped to current 2026/2027 worker shortages.", leftMargin + 6, y + 33);
   
   y += 50;
-
 
   // ---------------- PAGES 2+: INDIVIDUAL COUNTRY CHANNELS ----------------
   report.countries.forEach((country, index) => {
@@ -207,7 +245,8 @@ export function generateReportPDF(report: JapaReport, email: string) {
     doc.setFont("Helvetica", "bold");
     doc.setFontSize(13);
     doc.setTextColor(11, 106, 62);
-    doc.text(`${index + 1}. ${country.country.toUpperCase()} MATCH ${country.flag}`, leftMargin + 5, y + 9.5);
+    // Explicitly clean the name and omit the raw flag emoji to avoid page character rendering corruption
+    doc.text(`${index + 1}. ${cleanText(country.country).toUpperCase()} MATCH`, leftMargin + 5, y + 9.5);
 
     doc.setFont("Helvetica", "bold");
     doc.setFontSize(10.5);
@@ -227,9 +266,9 @@ export function generateReportPDF(report: JapaReport, email: string) {
     doc.line(leftMargin, y + 2, rightMargin, y + 2);
     y += 7;
 
-    const realityLines = doc.splitTextToSize(`REAlITY EXPLANATION: ${country.realityCheck}`, printableWidth);
     doc.setFont("Helvetica", "normal");
     doc.setFontSize(9);
+    const realityLines = doc.splitTextToSize(`REALITY ASSESSMENT: ${cleanText(country.realityCheck)}`, printableWidth);
     doc.setTextColor(30, 41, 59);
     doc.text(realityLines, leftMargin, y);
     y += realityLines.length * 4.2 + 4;
@@ -242,12 +281,13 @@ export function generateReportPDF(report: JapaReport, email: string) {
     doc.text("Direct Match Reason & Relevance:", leftMargin, y);
     y += 4.5;
     
-    const whyReasonLines = doc.splitTextToSize(country.whyForYou.matchReason, printableWidth);
     doc.setFont("Helvetica", "normal");
+    doc.setFontSize(9);
+    const whyReasonLines = doc.splitTextToSize(cleanText(country.whyForYou.matchReason), printableWidth);
     doc.text(whyReasonLines, leftMargin, y);
     y += whyReasonLines.length * 4.2 + 6;
 
-    // Beautiful Horizontal progress-style rating bars
+    // Beautiful Horizontal progress-style rating bars inside gold card
     checkPageBreak(50);
     doc.setFillColor(249, 246, 237);
     doc.rect(leftMargin, y, printableWidth, 42, "F");
@@ -263,22 +303,22 @@ export function generateReportPDF(report: JapaReport, email: string) {
     // Render bars side-by-side or stacked clean
     const drawRatingBarInline = (title: string, val: number, xVal: number, yVal: number, barW: number) => {
       doc.setFont("Helvetica", "bold");
-      doc.setFontSize(8.5);
+      doc.setFontSize(9);
       doc.setTextColor(51, 65, 85);
       doc.text(title, xVal, yVal + 3);
 
       doc.setFillColor(226, 232, 240);
-      doc.rect(xVal + 32, yVal + 0.5, barW, 3, "F");
+      doc.rect(xVal + 34, yVal + 0.5, barW, 3, "F");
 
       const fillCol = val >= 4 ? [11, 106, 62] : val >= 3 ? [245, 158, 11] : [239, 68, 68];
       doc.setFillColor(fillCol[0], fillCol[1], fillCol[2]);
-      doc.rect(xVal + 32, yVal + 0.5, (barW * val) / 5, 3, "F");
+      doc.rect(xVal + 34, yVal + 0.5, (barW * val) / 5, 3, "F");
 
-      // Draw Star text
+      // Draw numeric score with clean text to avoid standard emoji font corruptions
       doc.setFont("Helvetica", "bold");
-      doc.setFontSize(8);
-      doc.setTextColor(218, 180, 102);
-      doc.text("★".repeat(val) + "☆".repeat(5 - val), xVal + 32 + barW + 2, yVal + 3.2);
+      doc.setFontSize(8.5);
+      doc.setTextColor(30, 41, 59);
+      doc.text(`Score: ${val}/5`, xVal + 34 + barW + 2, yVal + 3.2);
     };
 
     drawRatingBarInline("Scholarships:", country.ratings.scholarship, leftMargin + 6, y + 14, 25);
@@ -306,27 +346,27 @@ export function generateReportPDF(report: JapaReport, email: string) {
     let rightY = y;
 
     limitPros.forEach((pro) => {
-      const plines = doc.splitTextToSize(`✔ ${pro}`, 84);
       doc.setFont("Helvetica", "normal");
       doc.setFontSize(8.5);
+      const plines = doc.splitTextToSize(`•  ${cleanText(pro)}`, 84);
       doc.setTextColor(11, 106, 62);
       doc.text(plines, leftMargin, leftY);
-      leftY += plines.length * 4.2 + 2;
+      leftY += plines.length * 4.2 + 2.5;
     });
 
     limitCons.forEach((con) => {
-      const clines = doc.splitTextToSize(`✘ ${con}`, 84);
       doc.setFont("Helvetica", "normal");
       doc.setFontSize(8.5);
+      const clines = doc.splitTextToSize(`•  ${cleanText(con)}`, 84);
       doc.setTextColor(185, 28, 28); // Crimson Red
       doc.text(clines, leftMargin + 92, rightY);
-      rightY += clines.length * 4.2 + 2;
+      rightY += clines.length * 4.2 + 2.5;
     });
 
     y = Math.max(leftY, rightY) + 6;
 
     // Section 2: Admissions Criteria
-    checkPageBreak(42);
+    checkPageBreak(45);
     doc.setFont("Helvetica", "bold");
     doc.setFontSize(11);
     doc.setTextColor(30, 41, 59);
@@ -337,13 +377,15 @@ export function generateReportPDF(report: JapaReport, email: string) {
     y += 7;
 
     // Academic Details & English Guidelines Box
-    const acadLines = doc.splitTextToSize(country.admissionRequirements.academic, 78);
-    const engLines = doc.splitTextToSize(country.admissionRequirements.english, 78);
+    doc.setFont("Helvetica", "normal");
+    doc.setFontSize(8.5);
+    const acadLines = doc.splitTextToSize(cleanText(country.admissionRequirements.academic), 78);
+    const engLines = doc.splitTextToSize(cleanText(country.admissionRequirements.english), 78);
     
     // Calculate required height dynamically based on line count
-    const acadNeededHeight = acadLines.length * 4.2 + 8;
-    const engNeededHeight = engLines.length * 4.2 + 8;
-    const requirementsHeight = Math.max(acadNeededHeight, engNeededHeight, 24);
+    const acadNeededHeight = acadLines.length * 4.2 + 10;
+    const engNeededHeight = engLines.length * 4.2 + 10;
+    const requirementsHeight = Math.max(acadNeededHeight, engNeededHeight, 26);
 
     checkPageBreak(requirementsHeight + 10);
 
@@ -377,21 +419,74 @@ export function generateReportPDF(report: JapaReport, email: string) {
     doc.setFontSize(9);
     doc.setTextColor(11, 106, 62);
     doc.text("Admissions Checklist Steps:", leftMargin, y);
-    y += 4.5;
+    y += 5;
     
     country.admissionRequirements.documentChecklist.forEach((docu) => {
       checkPageBreak(5);
       doc.setFont("Helvetica", "normal");
       doc.setFontSize(8.5);
       doc.setTextColor(71, 85, 105);
-      doc.text(`[  ]   ${docu}`, leftMargin + 4, y);
+      doc.text(`[  ]   ${cleanText(docu)}`, leftMargin + 4, y);
       y += 4.2;
     });
 
     y += 6;
 
-    // Section 3: Financial breakdown (Fully arranged grid table)
-    checkPageBreak(55);
+    // Section 3: Financial breakdown (Fully arranged grid table with dynamic cell wrapping to avoid word/value overflow)
+    const fin = country.selfFundedPath;
+    
+    // Column width configurations
+    const col1Width = 62;
+    const col2Width = 43;
+    const col3Width = 61;
+    
+    const rows = [
+      {
+        c1: "Average Annual Tuition:",
+        c2: fin.tuitionFeeNaira,
+        c3: fin.tuitionFeeLocal
+      },
+      {
+        c1: "Monthly Cost of Living:",
+        c2: `${fin.livingCostNaira} / mo`,
+        c3: `${fin.livingCostLocal} / mo`
+      },
+      {
+        c1: "Part-Time Work Potential:",
+        c2: fin.estimatedPartTimeEarningsNaira,
+        c3: fin.partTimeWorkRules
+      },
+      {
+        c1: "Estimated Net Annual Total Expenses:",
+        c2: fin.estimatedAnnualTotalNaira,
+        c3: "Inclusive of average rent options",
+        isTotal: true
+      }
+    ];
+
+    // Compute cell dimensions correctly beforehand matching exactly with rendering fonts
+    doc.setFont("Helvetica", "normal");
+    doc.setFontSize(8.5);
+    
+    const rowData = rows.map((row) => {
+      const c1Lines = doc.splitTextToSize(cleanText(row.c1), col1Width);
+      const c2Lines = doc.splitTextToSize(cleanText(row.c2), col2Width);
+      const c3Lines = doc.splitTextToSize(cleanText(row.c3), col3Width);
+      const maxLines = Math.max(c1Lines.length, c2Lines.length, c3Lines.length);
+      const rowHeight = maxLines * 4.2 + 4; // 4.2mm line step + 4mm overall padding
+      return {
+        c1Lines,
+        c2Lines,
+        c3Lines,
+        rowHeight,
+        isTotal: row.isTotal
+      };
+    });
+
+    const tblHeaderHeight = 8;
+    const totalTableHeight = tblHeaderHeight + rowData.reduce((acc, r) => acc + r.rowHeight, 0);
+
+    checkPageBreak(totalTableHeight + 15);
     doc.setFont("Helvetica", "bold");
     doc.setFontSize(11);
     doc.setTextColor(30, 41, 59);
@@ -401,12 +496,17 @@ export function generateReportPDF(report: JapaReport, email: string) {
     doc.line(leftMargin, y + 2, rightMargin, y + 2);
     y += 7;
 
-    const fin = country.selfFundedPath;
+    const tableStartY = y;
+    
+    // Draw robust background and borders using calculated absolute metrics values
     doc.setFillColor(245, 247, 246);
-    doc.rect(leftMargin, y, printableWidth, 34, "F");
-    doc.rect(leftMargin, y, printableWidth, 34, "S");
+    doc.rect(leftMargin, tableStartY, printableWidth, totalTableHeight, "F");
+    
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.25);
+    doc.rect(leftMargin, tableStartY, printableWidth, totalTableHeight, "S");
 
-    // Table elements
+    // X offsets
     const col1X = leftMargin + 4;
     const col2X = leftMargin + 70;
     const col3X = leftMargin + 115;
@@ -414,36 +514,40 @@ export function generateReportPDF(report: JapaReport, email: string) {
     doc.setFont("Helvetica", "bold");
     doc.setFontSize(9);
     doc.setTextColor(11, 106, 62);
-    doc.text("EXPENSE CATEGORY", col1X, y + 6);
-    doc.text("NAIRA EQUIVALENT", col2X, y + 6);
-    doc.text("LOCAL RATES", col3X, y + 6);
-    doc.line(leftMargin, y + 8, rightMargin, y + 8);
+    doc.text("EXPENSE CATEGORY", col1X, tableStartY + 5.5);
+    doc.text("NAIRA EQUIVALENT", col2X, tableStartY + 5.5);
+    doc.text("LOCAL RATES", col3X, tableStartY + 5.5);
+    doc.line(leftMargin, tableStartY + tblHeaderHeight, rightMargin, tableStartY + tblHeaderHeight);
 
-    doc.setFont("Helvetica", "normal");
-    doc.setFontSize(8.5);
-    doc.setTextColor(51, 65, 85);
-    
-    doc.text("Average Annual Tuition:", col1X, y + 13);
-    doc.text(fin.tuitionFeeNaira, col2X, y + 13);
-    doc.text(fin.tuitionFeeLocal, col3X, y + 13);
+    let currentY = tableStartY + tblHeaderHeight;
 
-    doc.text("Monthly Cost of Living:", col1X, y + 18);
-    doc.text(`${fin.livingCostNaira} / mo`, col2X, y + 18);
-    doc.text(`${fin.livingCostLocal} / mo`, col3X, y + 18);
+    rowData.forEach((row) => {
+      if (row.isTotal) {
+        doc.setFont("Helvetica", "bold");
+        doc.setTextColor(11, 106, 62);
+      } else {
+        doc.setFont("Helvetica", "normal");
+        doc.setTextColor(51, 65, 85);
+      }
+      doc.setFontSize(8.5);
 
-    doc.text("Part-Time Work Potential:", col1X, y + 23);
-    doc.text(fin.estimatedPartTimeEarningsNaira, col2X, y + 23);
-    doc.text(`${fin.partTimeWorkRules.slice(0, 38)}...`, col3X, y + 23);
+      doc.text(row.c1Lines, col1X, currentY + 4);
+      doc.text(row.c2Lines, col2X, currentY + 4);
 
-    doc.setFont("Helvetica", "bold");
-    doc.setTextColor(11, 106, 62);
-    doc.text("Estimated Net Annual Total Expenses:", col1X, y + 29);
-    doc.text(fin.estimatedAnnualTotalNaira, col2X, y + 29);
-    doc.setFont("Helvetica", "normal");
-    doc.setTextColor(100, 116, 139);
-    doc.text("Inclusive of average rent options", col3X, y + 29);
+      if (row.isTotal) {
+        doc.setFont("Helvetica", "normal");
+        doc.setTextColor(100, 116, 139);
+        doc.setFontSize(7.5);
+      }
+      doc.text(row.c3Lines, col3X, currentY + 4);
 
-    y += 42;
+      currentY += row.rowHeight;
+      if (currentY < tableStartY + totalTableHeight) {
+        doc.line(leftMargin, currentY, rightMargin, currentY);
+      }
+    });
+
+    y = tableStartY + totalTableHeight + 6;
 
     // Section 4: Embassy Visa Process
     checkPageBreak(58);
@@ -458,7 +562,9 @@ export function generateReportPDF(report: JapaReport, email: string) {
 
     const visa = country.embassyVisaProcess;
 
-    const addLines = doc.splitTextToSize(`Address: ${visa.addressLagosAbuja}`, printableWidth - 8);
+    doc.setFont("Helvetica", "normal");
+    doc.setFontSize(8.5);
+    const addLines = doc.splitTextToSize(cleanText(`Address: ${visa.addressLagosAbuja}`), printableWidth - 8);
     // Dynamically calculate required height for embassy contact info & variables
     const embassyBoxHeight = 15 + (addLines.length * 4.2) + 16;
 
@@ -473,30 +579,29 @@ export function generateReportPDF(report: JapaReport, email: string) {
     doc.setFont("Helvetica", "bold");
     doc.setFontSize(9.5);
     doc.setTextColor(11, 106, 62);
-    doc.text(visa.embassyName, leftMargin + 4, y + 6);
+    doc.text(cleanText(visa.embassyName), leftMargin + 4, y + 6);
 
     doc.setDrawColor(226, 232, 240);
     doc.line(leftMargin, y + 9, rightMargin, y + 9);
 
     doc.setFont("Helvetica", "normal");
     doc.setFontSize(8.5);
-    doc.setTextColor(51, 65, 85);
     doc.text(addLines, leftMargin + 4, y + 14);
 
     let contactLineY = y + 14 + (addLines.length * 4.2) + 1;
-    doc.text(`Contact: ${visa.email || "N/A"}  |  Tel: ${visa.phone || "N/A"}`, leftMargin + 4, contactLineY);
+    doc.text(cleanText(`Contact: ${visa.email || "N/A"}  |  Tel: ${visa.phone || "N/A"}`), leftMargin + 4, contactLineY);
 
     let feeLineY = contactLineY + 4.5;
     doc.setFont("Helvetica", "bold");
     doc.text("Required Embassy Visa Fee:", leftMargin + 4, feeLineY);
     doc.setFont("Helvetica", "normal");
-    doc.text(`${visa.visaFeeLocal} (~${visa.visaFeeNaira})`, leftMargin + 48, feeLineY);
+    doc.text(cleanText(`${visa.visaFeeLocal} (~${visa.visaFeeNaira})`), leftMargin + 48, feeLineY);
 
     let timeLineY = feeLineY + 4.5;
     doc.setFont("Helvetica", "bold");
     doc.text("Approx Processing Lead-Time:", leftMargin + 4, timeLineY);
     doc.setFont("Helvetica", "normal");
-    doc.text(visa.processingTimeWeeks, leftMargin + 48, timeLineY);
+    doc.text(cleanText(visa.processingTimeWeeks), leftMargin + 48, timeLineY);
 
     y += embassyBoxHeight + 6;
 
@@ -513,7 +618,7 @@ export function generateReportPDF(report: JapaReport, email: string) {
       doc.setFont("Helvetica", "normal");
       doc.setFontSize(8.5);
       doc.setTextColor(71, 85, 105);
-      doc.text(`[  ]   ${vdoc}`, leftMargin + 4, y);
+      doc.text(`[  ]   ${cleanText(vdoc)}`, leftMargin + 4, y);
       y += 4.2;
     });
 
@@ -540,8 +645,9 @@ export function generateReportPDF(report: JapaReport, email: string) {
       doc.text("Federal Ministry of Education (MoE), Abuja:", leftMargin, y);
       y += 4;
       doc.setFont("Helvetica", "normal");
+      doc.setFontSize(8.5);
       nStep.moe.steps.forEach((step) => {
-        const stepLines = doc.splitTextToSize(`• ${step}`, printableWidth - 5);
+        const stepLines = doc.splitTextToSize(`•  ${cleanText(step)}`, printableWidth - 5);
         checkPageBreak(stepLines.length * 4);
         doc.text(stepLines, leftMargin + 4, y);
         y += stepLines.length * 4 + 1.5;
@@ -556,8 +662,9 @@ export function generateReportPDF(report: JapaReport, email: string) {
       doc.text("Ministry of Foreign Affairs (MFA), Abuja:", leftMargin, y);
       y += 4;
       doc.setFont("Helvetica", "normal");
+      doc.setFontSize(8.5);
       nStep.mfa.steps.forEach((step) => {
-        const stepLines = doc.splitTextToSize(`• ${step}`, printableWidth - 5);
+        const stepLines = doc.splitTextToSize(`•  ${cleanText(step)}`, printableWidth - 5);
         checkPageBreak(stepLines.length * 4);
         doc.text(stepLines, leftMargin + 4, y);
         y += stepLines.length * 4 + 1.5;
@@ -584,13 +691,14 @@ export function generateReportPDF(report: JapaReport, email: string) {
     doc.setTextColor(51, 65, 85);
     doc.text("Official Post-Study Stay Back:", leftMargin, y);
     doc.setFont("Helvetica", "normal");
-    doc.text(`${path.postStudyWorkVisaName} (${path.duration})`, leftMargin + 48, y);
+    doc.text(cleanText(`${path.postStudyWorkVisaName} (${path.duration})`), leftMargin + 48, y);
     y += 4.5;
 
     doc.setFont("Helvetica", "bold");
     doc.text("PR Visa Qualification Rules:", leftMargin, y);
     doc.setFont("Helvetica", "normal");
-    const prDetails = doc.splitTextToSize(path.prRequirements, printableWidth - 48);
+    doc.setFontSize(8.5);
+    const prDetails = doc.splitTextToSize(cleanText(path.prRequirements), printableWidth - 48);
     doc.text(prDetails, leftMargin + 48, y);
     y += prDetails.length * 4 + 2;
 
@@ -598,8 +706,9 @@ export function generateReportPDF(report: JapaReport, email: string) {
     doc.setFont("Helvetica", "bold");
     doc.text("Allows Nigeria Dual Passport:", leftMargin, y);
     doc.setFont("Helvetica", "normal");
+    doc.setFontSize(8.5);
     const dualEx = doc.splitTextToSize(
-      `${path.allowsDualCitizenship ? "Fully Allowed." : "Sovereign Restrictions apply."} ${path.dualCitizenshipExplanation}`,
+      cleanText(`${path.allowsDualCitizenship ? "Fully Allowed." : "Sovereign Restrictions apply."} ${path.dualCitizenshipExplanation}`),
       printableWidth - 48
     );
     doc.text(dualEx, leftMargin + 48, y);
@@ -621,7 +730,7 @@ export function generateReportPDF(report: JapaReport, email: string) {
       // Timeline bullet representation
       doc.setFillColor(11, 106, 62);
       doc.circle(leftMargin + 4, y - 1, 1, "F");
-      const timeLines = doc.splitTextToSize(timelineItem, printableWidth - 10);
+      const timeLines = doc.splitTextToSize(cleanText(timelineItem), printableWidth - 10);
       doc.text(timeLines, leftMargin + 8, y);
       y += timeLines.length * 4 + 2;
     });
@@ -629,7 +738,7 @@ export function generateReportPDF(report: JapaReport, email: string) {
     y += 6;
 
     // Section 7: Travel Flight Checklists
-    checkPageBreak(35);
+    checkPageBreak(65); // High page break height to guarantee columns are kept together beautifully
     doc.setFont("Helvetica", "bold");
     doc.setFontSize(11);
     doc.setTextColor(30, 41, 59);
@@ -656,7 +765,7 @@ export function generateReportPDF(report: JapaReport, email: string) {
     country.preDepartureChecklist.slice(0, 4).forEach((item) => {
       doc.setFont("Helvetica", "normal");
       doc.setFontSize(8);
-      const prLines = doc.splitTextToSize(`✔ ${item}`, colHalfWidth);
+      const prLines = doc.splitTextToSize(`•  ${cleanText(item)}`, colHalfWidth);
       doc.text(prLines, leftMargin, preY);
       preY += prLines.length * 4 + 1.5;
     });
@@ -664,7 +773,7 @@ export function generateReportPDF(report: JapaReport, email: string) {
     country.firstWeekGuide.slice(0, 4).forEach((item) => {
       doc.setFont("Helvetica", "normal");
       doc.setFontSize(8);
-      const poLines = doc.splitTextToSize(`✈ ${item}`, colHalfWidth);
+      const poLines = doc.splitTextToSize(`•  ${cleanText(item)}`, colHalfWidth);
       doc.text(poLines, leftMargin + 94, postY);
       postY += poLines.length * 4 + 1.5;
     });
@@ -685,9 +794,9 @@ export function generateReportPDF(report: JapaReport, email: string) {
   doc.text("CONFIDENTIALITY & GENERAL ADMISSION SYSTEM DISCLAIMER", leftMargin + 5, y + 5);
 
   const finalDisclaimer = "The suitability indicators generated by JapaReady AI are compiled automatically from current educational fee tables, parallel currency indices, and generic embassy waitlists. These do not constitute official immigration authorization. Cross-examine requirements on government portals.";
-  const discLines = doc.splitTextToSize(finalDisclaimer, printableWidth - 10);
   doc.setFont("Helvetica", "normal");
   doc.setFontSize(7.2);
+  const discLines = doc.splitTextToSize(finalDisclaimer, printableWidth - 10);
   doc.text(discLines, leftMargin + 5, y + 9);
 
   // Save PDF file locally

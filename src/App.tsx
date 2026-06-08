@@ -33,6 +33,72 @@ export default function App() {
     }
   };
 
+  const getCountryFlagImg = (country: string, fallbackEmoji: string, sizeClass = "w-[1.5em] h-[1.125em]") => {
+    const norm = country.trim().toLowerCase();
+    let code = "";
+    if (norm.includes("germany")) code = "de";
+    else if (norm.includes("united kingdom") || norm.includes("uk") || norm.includes("gbr")) code = "gb";
+    else if (norm.includes("canada")) code = "ca";
+    else if (norm.includes("united states") || norm.includes("usa") || norm.includes("america")) code = "us";
+    else if (norm.includes("ireland")) code = "ie";
+    else if (norm.includes("netherlands") || norm.includes("holland")) code = "nl";
+    else if (norm.includes("france")) code = "fr";
+    else if (norm.includes("italy")) code = "it";
+    else if (norm.includes("australia")) code = "au";
+    else if (norm.includes("new zealand")) code = "nz";
+    else if (norm.includes("finland")) code = "fi";
+    else if (norm.includes("sweden")) code = "se";
+    else if (norm.includes("spain")) code = "es";
+    else if (norm.includes("portugal")) code = "pt";
+    else if (norm.includes("uae") || norm.includes("emirates")) code = "ae";
+    else if (norm.includes("malaysia")) code = "my";
+    else if (norm.includes("korea")) code = "kr";
+    else if (norm.includes("china")) code = "cn";
+    else if (norm.includes("poland")) code = "pl";
+    else if (norm.includes("hungary")) code = "hu";
+    else if (norm.includes("russia")) code = "ru";
+    else if (norm.includes("japan")) code = "jp";
+    else if (norm.includes("singapore")) code = "sg";
+    else if (norm.includes("norway")) code = "no";
+    else if (norm.includes("denmark")) code = "dk";
+    else if (norm.includes("switzerland")) code = "ch";
+    else if (norm.includes("belgium")) code = "be";
+    else if (norm.includes("austria")) code = "at";
+    else if (norm.includes("turkey")) code = "tr";
+    else if (norm.includes("south africa")) code = "za";
+    else if (norm.includes("brazil")) code = "br";
+    else if (norm.includes("india")) code = "in";
+    else if (norm.includes("cyprus")) code = "cy";
+    else if (norm.includes("greece")) code = "gr";
+    else if (norm.includes("czech")) code = "cz";
+    else if (norm.includes("luxembourg")) code = "lu";
+    else if (norm.includes("egypt")) code = "eg";
+    else if (norm.includes("estonia")) code = "ee";
+    else if (norm.includes("qatar")) code = "qa";
+    else if (norm.includes("saudi")) code = "sa";
+
+    if (code) {
+      return (
+        <span className="inline-flex items-center justify-center">
+          <img
+            src={`https://flagcdn.com/w80/${code}.png`}
+            srcSet={`https://flagcdn.com/w160/${code}.png 2x`}
+            alt={country}
+            className={`inline-block ${sizeClass} object-cover rounded-xs align-middle shadow-xs`}
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              (e.target as HTMLElement).style.display = 'none';
+              const sib = e.currentTarget.parentElement?.querySelector('.fallback-emoji');
+              if (sib) (sib as HTMLElement).style.display = 'inline-block';
+            }}
+          />
+          <span className="fallback-emoji hidden">{fallbackEmoji}</span>
+        </span>
+      );
+    }
+    return <span className="fallback-emoji">{fallbackEmoji}</span>;
+  };
+
   const countriesList = [
     { name: "Germany", flag: "🇩🇪", region: "Europe" },
     { name: "United Kingdom", flag: "🇬🇧", region: "Europe" },
@@ -53,7 +119,27 @@ export default function App() {
     { name: "South Korea", flag: "🇰🇷", region: "Asia" },
     { name: "China", flag: "🇨🇳", region: "Asia" },
     { name: "Poland", flag: "🇵🇱", region: "Europe" },
-    { name: "Hungary", flag: "🇭🇺", region: "Europe" }
+    { name: "Hungary", flag: "🇭🇺", region: "Europe" },
+    { name: "Russia", flag: "🇷🇺", region: "Europe/Asia" },
+    { name: "Japan", flag: "🇯🇵", region: "Asia" },
+    { name: "Singapore", flag: "🇸🇬", region: "Asia" },
+    { name: "Norway", flag: "🇳🇴", region: "Europe" },
+    { name: "Denmark", flag: "🇩🇰", region: "Europe" },
+    { name: "Switzerland", flag: "🇨🇭", region: "Europe" },
+    { name: "Belgium", flag: "🇧🇪", region: "Europe" },
+    { name: "Austria", flag: "🇦🇹", region: "Europe" },
+    { name: "Turkey", flag: "🇹🇷", region: "Europe" },
+    { name: "South Africa", flag: "🇿🇦", region: "Africa" },
+    { name: "Brazil", flag: "🇧🇷", region: "South America" },
+    { name: "India", flag: "🇮🇳", region: "Asia" },
+    { name: "Cyprus", flag: "🇨🇾", region: "Europe" },
+    { name: "Greece", flag: "🇬🇷", region: "Europe" },
+    { name: "Czech Republic", flag: "🇨🇿", region: "Europe" },
+    { name: "Luxembourg", flag: "🇱🇺", region: "Europe" },
+    { name: "Egypt", flag: "🇪🇬", region: "Africa" },
+    { name: "Estonia", flag: "🇪🇪", region: "Europe" },
+    { name: "Qatar", flag: "🇶🇦", region: "Middle East" },
+    { name: "Saudi Arabia", flag: "🇸🇦", region: "Middle East" }
   ];
 
   const handleFormSubmit = async (formData: ProfileFormType) => {
@@ -68,6 +154,15 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData)
       });
+
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("text/html")) {
+        const text = await res.text();
+        console.error("Received HTML response instead of JSON:", text);
+        throw new Error(
+          "The JapaReady AI engine is currently finalizing its network pipeline or experiencing peak load. Please wait a few seconds and try submitting again."
+        );
+      }
 
       const data = await res.json();
       if (!data.success) {
@@ -123,7 +218,7 @@ export default function App() {
                 </h1>
                 
                 <p className="text-light-text text-base md:text-lg max-w-xl leading-relaxed">
-                  We analyze your degree, grades, budget, English proficiency, and experience against <strong>20+ countries in real-time</strong>. Get tuition and living costs in Naira, visa checklists, and step-by-step pathways to relocation.
+                  We analyze your degree, grades, budget, English proficiency, and experience against <strong>40+ countries in real-time</strong>. Get tuition and living costs in Naira, visa checklists, and step-by-step pathways to relocation.
                 </p>
 
                 <div className="flex flex-col sm:flex-row gap-4 pt-2">
@@ -149,7 +244,7 @@ export default function App() {
             {/* Float badges statistics */}
             <div className="grid grid-cols-3 gap-4 pt-8 border-t border-light-gold/20 max-w-lg">
               <div>
-                <span className="font-serif text-2xl md:text-3xl font-bold text-primary-green block">20+</span>
+                <span className="font-serif text-2xl md:text-3xl font-bold text-primary-green block">40+</span>
                 <span className="text-[10px] font-mono font-bold text-light-text uppercase tracking-wider">Destination Countries</span>
               </div>
               <div>
@@ -382,7 +477,7 @@ export default function App() {
               Countries Checked by our AI Core Classifier
             </h2>
             <p className="text-light-text text-sm">
-              We check your profile compatibility factors against over 20+ top-tier study and work locations:
+              We check your profile compatibility factors against over 40+ top-tier study and work locations:
             </p>
           </div>
 
@@ -393,7 +488,9 @@ export default function App() {
                 className="bg-white p-4 rounded-2xl border border-light-gold/20 shadow-xs text-center flex flex-col items-center justify-center space-y-2 hover:translate-y-[-3px] transition-transform duration-300"
                 id={`country-card-${c.name.toLowerCase()}`}
               >
-                <span className="text-4xl filter drop-shadow-xs">{c.flag}</span>
+                <span className="text-4xl filter drop-shadow-xs flex items-center justify-center">
+                  {getCountryFlagImg(c.name, c.flag)}
+                </span>
                 <span className="font-serif text-sm font-semibold text-dark-text">{c.name}</span>
                 <span className="text-[9px] font-mono text-light-text uppercase tracking-wider">{c.region}</span>
               </div>

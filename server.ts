@@ -96,7 +96,7 @@ app.post("/api/analyze", async (req, res) => {
     // Build highly specific analysis prompt to guarantee correct fields and context
     const prompt = `
       You are JapaReady AI, an expert immigration and study advisor for Nigerians.
-      Analyze this profile and generate a comprehensive "JapaReport" object format for 3 matched countries from their preference list (or best 3 fits out of the 20+ supported countries):
+      Analyze this profile and generate a comprehensive "JapaReport" object format for 3 matched countries from their preference list (or best 3 fits out of the 40+ supported countries, including Russia if suitable):
 
       === NIGERIAN STUDENT PROFILE ===
       Name: ${profile.fullName}
@@ -127,7 +127,7 @@ app.post("/api/analyze", async (req, res) => {
          - High CGPA + IELTS + Budget = High score (75-98)
          - Low Budget (e.g. Needs full scholarship) = Harder but possible with extreme scholarship matches.
          - Qualification HND/ND: Provide top-up pathways or specific MSc admission notes!
-      2. Match them with exactly 3 recommended countries among Germany, UK, Canada, USA, Ireland, France, Netherlands, Italy, Finland, Sweden, UAE, South Korea, Australia, New Zealand, etc.
+      2. Match them with exactly 3 recommended countries among Germany, UK, Canada, USA, Ireland, France, Netherlands, Italy, Finland, Sweden, UAE, South Korea, Australia, New Zealand, Russia, Japan, etc.
       3. For EACH matched country, provide highly realistic, personalized, and robust data in Naira conversion (using $1 = ₦${usdToNgn}):
          - A short "Reality Check" warning summarizing Nigerian approval rates or specific challenges.
          - Structured "Scholarship Path" items with precise actual names (e.g., DAAD in Germany, Chevening/Commonwealth in UK, Vanier in Canada) showing deadlines, what they cover, and tips.
