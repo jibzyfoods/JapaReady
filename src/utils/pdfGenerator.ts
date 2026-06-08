@@ -35,7 +35,7 @@ export function getReportId(email: string): string {
   return `JR-2026-${idNum}`;
 }
 
-export function generateReportPDF(report: JapaReport, email: string) {
+export function generateReportPDF(report: JapaReport, email: string, autoDownload: boolean = true): jsPDF {
   const reportId = getReportId(email);
   const doc = new jsPDF({
     orientation: "portrait",
@@ -714,6 +714,18 @@ export function generateReportPDF(report: JapaReport, email: string) {
     doc.text(dualEx, leftMargin + 48, y);
     y += dualEx.length * 4 + 6;
 
+    checkPageBreak(12);
+    doc.setFont("Helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.text("Family Dependents Rules:", leftMargin, y);
+    doc.setFont("Helvetica", "normal");
+    const depEx = doc.splitTextToSize(
+      cleanText(path.familyReunificationDetails || "No custom dependent rules specified."),
+      printableWidth - 48
+    );
+    doc.text(depEx, leftMargin + 48, y);
+    y += depEx.length * 4 + 6;
+
     // Travel Milestone Timeline steps
     checkPageBreak(30);
     doc.setFont("Helvetica", "bold");
@@ -800,5 +812,8 @@ export function generateReportPDF(report: JapaReport, email: string) {
   doc.text(discLines, leftMargin + 5, y + 9);
 
   // Save PDF file locally
-  doc.save(`JapaReady-Premium-Assessment-Dossier.pdf`);
+  if (autoDownload) {
+    doc.save(`JapaReady-Premium-Assessment-Dossier.pdf`);
+  }
+  return doc;
 }

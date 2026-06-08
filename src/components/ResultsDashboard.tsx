@@ -3,7 +3,7 @@ import { JapaReport, CountryResult } from "../types";
 import { 
   Lock, CheckCircle2, AlertTriangle, HelpCircle, ArrowRight, Stars, CreditCard, 
   MapPin, Landmark, BookOpen, Clock, Globe2, Briefcase, FileText, Compass, Download, CheckSquare,
-  DollarSign
+  DollarSign, Mail
 } from "lucide-react";
 import PaystackSim from "./PaystackSim";
 import { generateReportPDF, getReportId } from "../utils/pdfGenerator";
@@ -17,6 +17,66 @@ export default function ResultsDashboard({ report, email }: ResultsDashboardProp
   const [isPaid, setIsPaid] = useState(false);
   const [showPaystack, setShowPaystack] = useState(false);
   const [activeCountryTab, setActiveCountryTab] = useState<number>(0);
+  const [isEmailing, setIsEmailing] = useState(false);
+  const [emailSuccess, setEmailSuccess] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+
+  const handleEmailPDF = async () => {
+    setIsEmailing(true);
+    setEmailSuccess(null);
+    setEmailError(null);
+    try {
+      // 1. Generate the PDF on the client silently
+      const doc = generateReportPDF(report, email, false);
+      
+      // 2. Output the document as dataurlstring (Actual PDF bytes in Base64)
+      const dataUri = doc.output("dataurlstring");
+
+      if (!dataUri || !dataUri.includes("base64,")) {
+        throw new Error("Unable to encode the generated PDF document correctly.");
+      }
+
+      // 3. Extract Name/ID details
+      const reportId = getReportId(email);
+
+      // 4. Post to our backend Express endpoint
+      const response = await fetch("/api/send-email", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: email,
+          pdfBase64: dataUri,
+          reportId: reportId,
+          userName: "Scholar"
+        }),
+      });
+
+      // Avoid parsing as JSON if the response content is HTML (e.g. server reboots or hot-reloading)
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("The application server is briefly rebooting or hot-reloading keys. Please wait 10 seconds and click 'Send to My Gmail' again to deliver!");
+      }
+
+      const resData = await response.json();
+      if (resData.success) {
+        setEmailSuccess(resData.message || `Successfully sent report to ${email}!`);
+      } else {
+        setEmailError(resData.error || "Could not send email to Gmail.");
+      }
+    } catch (err: any) {
+      console.error("Email sending failure:", err);
+      // Clean, actionable error message for reboots or parsing failures
+      if (err.message && (err.message.includes("Unexpected token") || err.message.includes("is not valid JSON") || err.message.includes("Unexpected character"))) {
+        setEmailError("The email delivery handler is briefly re-establishing connection after backend synchronization. Please wait 5 seconds and click 'Send to My Gmail' again!");
+      } else {
+        setEmailError(`${err.message || err}`);
+      }
+    } finally {
+      setIsEmailing(false);
+    }
+  };
 
   const getCountryFlagImg = (country: string, fallbackEmoji: string, sizeClass = "w-[1.5em] h-[1.125em]") => {
     const norm = country.trim().toLowerCase();
@@ -41,6 +101,26 @@ export default function ResultsDashboard({ report, email }: ResultsDashboardProp
     else if (norm.includes("china")) code = "cn";
     else if (norm.includes("poland")) code = "pl";
     else if (norm.includes("hungary")) code = "hu";
+    else if (norm.includes("russia")) code = "ru";
+    else if (norm.includes("japan")) code = "jp";
+    else if (norm.includes("singapore")) code = "sg";
+    else if (norm.includes("norway")) code = "no";
+    else if (norm.includes("denmark")) code = "dk";
+    else if (norm.includes("switzerland")) code = "ch";
+    else if (norm.includes("belgium")) code = "be";
+    else if (norm.includes("austria")) code = "at";
+    else if (norm.includes("turkey")) code = "tr";
+    else if (norm.includes("south africa")) code = "za";
+    else if (norm.includes("brazil")) code = "br";
+    else if (norm.includes("india")) code = "in";
+    else if (norm.includes("cyprus")) code = "cy";
+    else if (norm.includes("greece")) code = "gr";
+    else if (norm.includes("czech")) code = "cz";
+    else if (norm.includes("luxembourg")) code = "lu";
+    else if (norm.includes("egypt")) code = "eg";
+    else if (norm.includes("estonia")) code = "ee";
+    else if (norm.includes("qatar")) code = "qa";
+    else if (norm.includes("saudi")) code = "sa";
 
     if (code) {
       return (
@@ -160,16 +240,37 @@ export default function ResultsDashboard({ report, email }: ResultsDashboardProp
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {isPaid ? (
-              <button
-                onClick={() => {
-                  generateReportPDF(report, email);
-                }}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-green hover:bg-light-green text-white text-xs font-bold rounded-full transition-all duration-300 hover:-translate-y-0.5 shadow-md cursor-pointer"
-                id="download-pdf-report-btn"
-              >
-                <Download className="w-4 h-4" />
-                <span>Download PDF Report</span>
-              </button>
+              <>
+                <button
+                  onClick={() => {
+                    generateReportPDF(report, email);
+                  }}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-green hover:bg-light-green text-white text-xs font-bold rounded-full transition-all duration-300 hover:-translate-y-0.5 shadow-md cursor-pointer font-serif text-[11px]"
+                  id="download-pdf-report-btn"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download PDF Report</span>
+                </button>
+                <button
+                  onClick={handleEmailPDF}
+                  disabled={isEmailing}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-royal-blue text-white text-xs font-bold rounded-full transition-all duration-300 hover:-translate-y-0.5 shadow-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed font-serif text-[11px]"
+                  id="email-pdf-report-btn"
+                  style={{ backgroundColor: "#1d4ed8" }}
+                >
+                  {isEmailing ? (
+                    <>
+                      <Clock className="w-4 h-4 animate-spin" />
+                      <span>Sending to Gmail...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="w-4 h-4" />
+                      <span>Send to My Gmail</span>
+                    </>
+                  )}
+                </button>
+              </>
             ) : (
               <button
                 onClick={() => setShowPaystack(true)}
@@ -187,6 +288,30 @@ export default function ResultsDashboard({ report, email }: ResultsDashboardProp
             )}
           </div>
         </div>
+
+        {/* Real-time Email notifications success and failure indicators */}
+        {(emailSuccess || emailError) && (
+          <div className="mb-5 max-w-xl animate-fade-in transition-all">
+            {emailSuccess && (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs flex items-start gap-2.5 shadow-xs animate-fade-in">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <strong className="text-dark-text block mb-0.5 font-serif font-bold text-sm">Dossier Emailed Successfully!</strong>
+                  <p className="text-emerald-700 font-normal leading-relaxed">{emailSuccess}</p>
+                </div>
+              </div>
+            )}
+            {emailError && (
+              <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl text-xs flex items-start gap-2.5 shadow-xs animate-fade-in">
+                <AlertTriangle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <strong className="text-rose-950 block mb-0.5 font-serif font-bold text-sm font-bold">Delivery Unsuccessful</strong>
+                  <p className="text-rose-700 font-normal leading-relaxed">{emailError}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Tab switch buttons */}
         <div className="flex flex-wrap gap-2.5">
@@ -573,20 +698,29 @@ export default function ResultsDashboard({ report, email }: ResultsDashboardProp
                   6. Post-Study & Permanent Residency (PR) Pathway
                 </h5>
                 <div className="space-y-4 text-xs leading-relaxed text-body-text">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="p-4 bg-cream-bg/30 rounded-2xl">
-                      <strong className="text-dark-text block">Post-Study Work Permit</strong>
+                      <strong className="text-dark-text block hover:text-primary-green transition-colors">Post-Study Work Permit</strong>
                       <p className="font-serif font-bold text-emerald-700 text-sm mt-1">{currentCountry.postStudyPathway.postStudyWorkVisaName}</p>
                       <p className="mt-1"><strong>Duration:</strong> {currentCountry.postStudyPathway.duration}</p>
                       <p><strong>Switch Allowed? </strong> {currentCountry.postStudyPathway.canSwitchToWorkVisa ? "Yes" : "No"}</p>
-                      <p><strong>Job Constrains: </strong> {currentCountry.postStudyPathway.canWorkAnyJob ? "Open Visa" : "Employer Sponsored Only"}</p>
+                      <p><strong>Job Constraints: </strong> {currentCountry.postStudyPathway.canWorkAnyJob ? "Open Visa" : "Employer Sponsored Only"}</p>
                     </div>
 
                     <div className="p-4 bg-cream-bg/30 rounded-2xl">
-                      <strong className="text-dark-text block">Permanent Residency (PR) Pathway</strong>
-                      <p className="mt-1"><strong>Years of Eligibility:</strong> {currentCountry.postStudyPathway.prEligibilityYears}</p>
-                      <p><strong>Application costs:</strong> {currentCountry.postStudyPathway.prCost}</p>
-                      <p><strong>General benefits:</strong> {currentCountry.postStudyPathway.prBenefits}</p>
+                      <strong className="text-dark-text block hover:text-primary-green transition-colors">Permanent Residency (PR)</strong>
+                      <p className="mt-1"><strong>Eligibility:</strong> {currentCountry.postStudyPathway.prEligibilityYears}</p>
+                      <p><strong>Application Fees:</strong> {currentCountry.postStudyPathway.prCost}</p>
+                      <p><strong>Key PR Benefits:</strong> {currentCountry.postStudyPathway.prBenefits}</p>
+                    </div>
+
+                    <div className="p-4 bg-cream-bg/30 rounded-2xl border border-light-gold/15">
+                      <strong className="text-dark-text block flex items-center gap-1 text-amber-700 font-bold uppercase tracking-wider font-mono text-[10px]">
+                        👨‍👩‍👧 Dependents Status
+                      </strong>
+                      <p className="mt-1 text-dark-text/90 font-medium text-xs leading-relaxed">
+                        {currentCountry.postStudyPathway.familyReunificationDetails}
+                      </p>
                     </div>
                   </div>
 

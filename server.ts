@@ -2,8 +2,9 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import dns from "dns";
+import nodemailer from "nodemailer";
 
 // Fix for modern ESM environments: safely derive paths if available
 const currentFilename = typeof import.meta !== "undefined" && import.meta.url ? fileURLToPath(import.meta.url) : "";
@@ -13,7 +14,8 @@ const currentDirname = currentFilename ? path.dirname(currentFilename) : process
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // Initialize Gemini SDK with telemetry User-Agent
 const apiKey = process.env.GEMINI_API_KEY;
@@ -135,7 +137,7 @@ app.post("/api/analyze", async (req, res) => {
          - "Admission Requirements" specific to their qualification (e.g. HND conversion requirements, post-grad certificate, or direct MSc).
          - "Nigerian Side Processes" detailed: WAEC verification steps, Ministry of Education authentication (if country rules need MOE/MFA apostille/notarization).
          - "Embassy and Visa Process" detailed: Address in Lagos/Abuja, actual visa fees in local + Naira, exact appointment website details, rejection risks and safety actions.
-         - "Post-Study Pathway", permanent residency timeline milestones, whether dual citizenship with Nigeria is allowed (e.g., Germany now allows dual citizenship, UK allows, Netherlands generally doesn't unless married, etc.).
+         - "Post-Study Pathway", permanent residency timeline milestones, whether dual citizenship with Nigeria is allowed (e.g., Germany now allows dual citizenship, UK allows, Netherlands generally doesn't unless married, etc.), and extremely explicit rules on whether family dependents (spouses/children) can accompany the applicant for their specific degree/qualification level.
          - Pre-Departure and 1st Week Checklist actions starting from today.
 
       The response MUST be a valid JSON representation matching the JapaReport typescript structure. Do not include markdown wraps around the code (e.g. no \`\`\`json blocks). Make it pure JSON.
@@ -146,8 +148,11 @@ app.post("/api/analyze", async (req, res) => {
       model: "gemini-3.5-flash",
       contents: prompt,
       config: {
-        systemInstruction: "You are an expert full-stack automated Relocation Planner (JapaReady AI) designed for Nigerian students. You return exact, accurate, and completely populated JSON reports reflecting current 2026 rules and real exchange rates.",
+        systemInstruction: "You are an expert full-stack automated Relocation Planner (JapaReady AI) designed for Nigerian students. You return exact, accurate, and completely populated JSON reports reflecting current 2026 rules and real exchange rates. CRITICAL FOR PERFORMANCE: Keep all descriptions, paragraphs, and list values extremely concise, short, and straight-to-the-point (max 1-2 brief sentences per description, and keep list arrays to 3-4 key items). Avoid wordy or long essays to ensure near-instant dynamic generation speeds.",
         responseMimeType: "application/json",
+        thinkingConfig: {
+          thinkingLevel: ThinkingLevel.MINIMAL
+        },
         responseSchema: {
           type: Type.OBJECT,
           required: ["score", "scoreText", "profileSummaryText", "countries"],
@@ -317,7 +322,7 @@ app.post("/api/analyze", async (req, res) => {
                       allowsDualCitizenship: { type: Type.BOOLEAN },
                       dualCitizenshipExplanation: { type: Type.STRING },
                       passportStrengthRank: { type: Type.STRING },
-                      familyReunificationDetails: { type: Type.STRING },
+                      familyReunificationDetails: { type: Type.STRING, description: "Highly explicit guidelines on whether family dependents (spouses/children) can join them on a study visa based on their specific qualification (e.g., standard Masters vs PHD vs Top-up) and target country. Highlight current rules clearly." },
                       timelineSummary: { type: Type.ARRAY, items: { type: Type.STRING }, description: "An array mapping Year 1, Year 2-3, Year 3-5, Year 5+" }
                     }
                   }
@@ -354,6 +359,109 @@ app.post("/api/analyze", async (req, res) => {
       console.error("Critical fallback failure:", fallbackErr);
       res.status(500).json({ success: false, error: err.message || "An error occurred during AI analysis." });
     }
+  }
+});
+
+// Send generated PDF Report directly to client's Gmail address via SMTP
+app.post("/api/send-email", async (req, res) => {
+  const { email, pdfBase64, reportId, userName } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ success: false, error: "Recipient email is required." });
+  }
+  if (!pdfBase64) {
+    return res.status(400).json({ success: false, error: "PDF content is required." });
+  }
+
+  const host = process.env.SMTP_HOST;
+  const port = process.env.SMTP_PORT;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  const from = process.env.SMTP_FROM || "JapaReady AI <noreply@japaready.com>";
+
+  const reportCode = reportId || "JR-2026";
+  const nameDisplay = userName ? ` ${userName}` : "";
+
+  const subject = `Your JapaReady AI Premium Relocation Dossier [${reportCode}]`;
+  const bodyText = `Hello${nameDisplay},
+
+Thank you for trusting JapaReady AI with your study abroad suitability assessment.
+
+We have compiled your personal, high-fidelity premium relocation suitability report as requested.
+Please find the attached PDF dossier containing detailed admissions guidelines, live Naira conversions, embassy contact addresses, credentials legalisation matrices, post-study residency pathways, and family dependent rules.
+
+Best of luck on your Japa journey!
+
+Sincerely,
+The JapaReady AI Advisory Team
+https://japaready.com`;
+
+  const bodyHtml = `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e1e8ed; border-radius: 12px; background-color: #ffffff;">
+    <div style="background-color: #0b6a3e; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+      <h1 style="color: #ffffff; margin: 0; font-size: 20px; letter-spacing: 1px;">JAPAREADY AI</h1>
+      <p style="color: #dab466; margin: 5px 0 0 0; font-size: 11px; font-weight: bold; letter-spacing: 0.5px;">PREMIUM ASSESSMENT DOSSIER</p>
+    </div>
+    <div style="padding: 24px; color: #334155; line-height: 1.6;">
+      <h2 style="color: #0b6a3e; margin-top: 0; font-size: 16px;">Hello${nameDisplay},</h2>
+      <p>Thank you for trusting JapaReady AI with your study abroad suitability assessment.</p>
+      <p>We are delighted to deliver your <strong>Premium Relocation Suitability Report (ID: ${reportCode})</strong> straight to your inbox.</p>
+      <p>Your comprehensive document includes complete checklists, cost indices converted to live parallel market Naira, precise embassy details, and clear advisory milestones on academic admissions and pathways.</p>
+      <div style="margin: 24px 0; background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 8px; text-align: center;">
+        <span style="font-size: 11px; font-weight: bold; color: #64748b; text-transform: uppercase;">Assessment Record ID</span>
+        <div style="font-family: monospace; font-size: 18px; font-weight: bold; color: #0b6a3e; margin-top: 4px;">${reportCode}</div>
+      </div>
+      <p>Sincerely,<br/><strong>The JapaReady AI Advisory Team</strong></p>
+    </div>
+    <div style="background-color: #f1f5f9; padding: 12px; text-align: center; font-size: 10px; color: #64748b; border-radius: 0 0 8px 8px; border-top: 1px solid #e2e8f0;">
+      This email contains your personal, confidential immigration matching data. Do not forward to unauthorized recipients.
+    </div>
+  </div>`;
+
+  if (!host || !user || !pass) {
+    console.info("SMTP environment variables not configured. Simulated sending email to:", email);
+    return res.json({
+      success: true,
+      isDemoMode: true,
+      message: `Your report PDF [${reportCode}] was successfully processed! SMTP is not configured in this server environment yet, so we have simulated sending the email to ${email}. You can configure SMTP credentials in your Secrets/Environment tab for real live inbox delivery.`
+    });
+  }
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host,
+      port: parseInt(port || "465"),
+      secure: port === "465", // default true for 465, false for 587
+      auth: {
+        user,
+        pass,
+      },
+    });
+
+    // Robustly extract the base64 portion from any data URI format (Handles optional filename etc.)
+    const base64Index = pdfBase64.indexOf(";base64,");
+    const cleanBase64 = base64Index !== -1 ? pdfBase64.substring(base64Index + 8) : pdfBase64;
+
+    const mailOptions = {
+      from,
+      to: email,
+      subject,
+      text: bodyText,
+      html: bodyHtml,
+      attachments: [
+        {
+          filename: `JapaReady-Premium-Dossier-${reportCode}.pdf`,
+          content: Buffer.from(cleanBase64, "base64"),
+          contentType: "application/pdf"
+        }
+      ]
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`Successfully emailed report ${reportCode} to ${email}`);
+    res.json({ success: true, isDemoMode: false, message: `The PDF dossier has been successfully sent to ${email}!` });
+  } catch (error: any) {
+    console.error("Failed to send email via SMTP:", error);
+    res.status(500).json({ success: false, error: `Email transmission failed: ${error.message}` });
   }
 });
 
