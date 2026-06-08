@@ -1,0 +1,6 @@
+{
+  "name": "JapaReady",
+  "description": "The AI-Powered Japa Calculator For Nigerians. Get your personalized study abroad relocation roadmap with cost breakdowns, scholarships, visa guides, and authentication steps.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
